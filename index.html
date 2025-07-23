@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Planet Generator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0a0a0a; 
+            color: #e0e0e0; 
+        }
+        #container { 
+            width: 100vw; 
+            height: 100vh; 
+        }
+        #gui-container { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(16, 16, 16, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 25px; 
+            border-radius: 16px; 
+            width: 320px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .gui-element { 
+            margin-bottom: 20px; 
+        }
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #a0a0a0;
+        }
+        select, button, input[type="range"] { 
+            width: 100%; 
+            padding: 12px; 
+            border-radius: 8px; 
+            border: 1px solid #333; 
+            background: #1a1a1a; 
+            color: #e0e0e0; 
+            box-sizing: border-box; 
+            font-size: 1rem;
+        }
+        button { 
+            cursor: pointer; 
+            background: linear-gradient(90deg, #4a90e2, #50e3c2);
+            border: none; 
+            font-weight: 700;
+            color: #fff;
+            transition: transform 0.2s ease;
+        }
+        button:hover { 
+            transform: scale(1.02);
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            background: #333;
+            outline: none;
+            padding: 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #50e3c2;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #50e3c2;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        @media (max-width: 600px) {
+            #gui-container {
+                width: auto;
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+                top: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="gui-container">
+        <div class="gui-element">
+            <label for="planet-style">Planet Style</label>
+            <select id="planet-style">
+                <option value="earth">Earth</option>
+                <option value="mars">Mars</option>
+                <option value="tatooine">Tatooine</option>
+                <option value="death_star">Death Star</option>
+            </select>
+        </div>
+        <div class="gui-element">
+            <button id="generate-new-world">Generate New World</button>
+        </div>
+        <div class="gui-element">
+            <button id="summon-asteroid">Summon Asteroid</button>
+        </div>
+        <div class="gui-element">
+            <label for="time-of-day">Time of Day</label>
+            <input type="range" id="time-of-day" min="0" max="360" value="135">
+        </div>
+        <div id="terrain-controls"></div>
+    </div>
+
+    <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+            "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js"
+        }
+    }
+    </script>
+
+    <script id="planet-vertex-shader" type="x-shader/x-vertex">
+        uniform float seed;
+        uniform float mountainHeight;
+        
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        varying float vElevation;
+
+        // Simplex 3D Noise
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+        float snoise(vec3 v) {
+            const vec2 C = vec2(1.0/6.0, 1.0/3.0) ;
+            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+            vec3 i  = floor(v + dot(v, C.yyy) );
+            vec3 x0 =   v - i + dot(i, C.xxx) ;
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min( g.xyz, l.zxy );
+            vec3 i2 = max( g.xyz, l.zxy );
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
+            i = mod289(i);
+            vec4 p = permute( permute( permute(
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+            float n_ = 0.142857142857; // 1.0/7.0
+            vec3  ns = n_ * D.wyz - D.xzx;
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_ );
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+            vec4 b0 = vec4( x.xy, y.xy );
+            vec4 b1 = vec4( x.zw, y.zw );
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+            vec3 p0 = vec3(a0.xy,h.x);
+            vec3 p1 = vec3(a0.zw,h.y);
+            vec3 p2 = vec3(a1.xy,h.z);
+            vec3 p3 = vec3(a1.zw,h.w);
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+        }
+
+        float getElevation(vec3 p) {
+            float elevation = 0.0;
+            float frequency = 1.0;
+            float amplitude = 1.0;
+            for (int i = 0; i < 8; i++) {
+                elevation += snoise(p * frequency + seed) * amplitude;
+                frequency *= 2.0;
+                amplitude *= 0.5;
+            }
+            return elevation;
+        }
+
+        void main() {
+            vNormal = normalize(normal);
+            vPosition = position;
+            vElevation = getElevation(position);
+
+            vec3 newPosition = position + normal * vElevation * mountainHeight * 0.1;
+
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+        }
+    </script>
+
+    <script id="planet-fragment-shader" type="x-shader/x-fragment">
+        uniform int planetType; // 0: Earth, 1: Mars, 2: Tatooine, 3: Death Star
+        uniform vec3 sunDirection;
+        uniform float oceanLevel;
+        uniform float iceCapSize;
+        uniform float dustLevel;
+        uniform float craterSize;
+        uniform float duneHeight;
+        uniform float rockiness;
+        uniform float trenchWidth;
+        uniform float cannonSize;
+
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        varying float vElevation;
+
+        void main() {
+            float elevation = vElevation;
+            vec3 color;
+
+            if (planetType == 0) { // Earth
+                vec3 deepOceanColor = vec3(0.0, 0.1, 0.3);
+                vec3 shallowOceanColor = vec3(0.1, 0.3, 0.8);
+                vec3 sandColor = vec3(0.8, 0.7, 0.5);
+                vec3 grassColor = vec3(0.2, 0.6, 0.2);
+                vec3 rockColor = vec3(0.4, 0.4, 0.4);
+                vec3 snowColor = vec3(1.0, 1.0, 1.0);
+
+                if (elevation < oceanLevel - 0.1) {
+                    color = deepOceanColor;
+                } else if (elevation < oceanLevel) {
+                    color = mix(deepOceanColor, shallowOceanColor, (elevation - (oceanLevel - 0.1)) / 0.1);
+                } else if (elevation < oceanLevel + 0.05) {
+                    color = sandColor;
+                } else if (elevation < 0.5) {
+                    color = grassColor;
+                } else if (elevation < 0.8) {
+                    color = rockColor;
+                } else {
+                    color = snowColor;
+                }
+                if (elevation < oceanLevel) {
+                    vec3 reflection = reflect(-sunDirection, normalize(vNormal));
+                    float specular = max(0.0, dot(normalize(-vPosition), reflection));
+                    specular = pow(specular, 32.0);
+                    color += vec3(1.0, 1.0, 1.0) * specular * 0.5;
+                }
+            } else if (planetType == 1) { // Mars
+                vec3 marsColor = vec3(0.9, 0.4, 0.2);
+                vec3 darkMarsColor = vec3(0.6, 0.2, 0.1);
+                color = mix(darkMarsColor, marsColor, dustLevel);
+            } else if (planetType == 2) { // Tatooine
+                vec3 sandColor = vec3(0.9, 0.8, 0.6);
+                vec3 rockColor = vec3(0.6, 0.5, 0.4);
+                float rock = smoothstep(0.5 - rockiness, 0.5, elevation);
+                color = mix(sandColor, rockColor, rock);
+            } else if (planetType == 3) { // Death Star
+                color = vec3(0.5);
+                // Trench
+                if (abs(vPosition.y) < trenchWidth) {
+                    color = vec3(0.2);
+                }
+                // Cannon
+                vec3 cannonPos = vec3(0.7, 0.3, 0.0);
+                if (distance(vPosition, cannonPos) < cannonSize) {
+                    color = vec3(0.1);
+                }
+            }
+
+            // Ice caps
+            if (planetType < 2) {
+                float ice = smoothstep(1.0 - iceCapSize, 1.0 - iceCapSize + 0.1, abs(vPosition.y));
+                color = mix(color, vec3(1.0), ice);
+            }
+
+            // Lighting
+            float diffuse = max(0.0, dot(normalize(vNormal), sunDirection));
+            
+            gl_FragColor = vec4(color * diffuse, 1.0);
+        }
+    </script>
+    
+    <script id="atmosphere-vertex-shader" type="x-shader/x-vertex">
+        varying vec3 vNormal;
+        void main() {
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+
+    <script id="atmosphere-fragment-shader" type="x-shader/x-fragment">
+        uniform int planetType;
+        uniform vec3 sunDirection;
+        varying vec3 vNormal;
+
+        void main() {
+            float intensity = pow(0.7 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
+            float atmosphericGlow = dot(vNormal, sunDirection);
+            atmosphericGlow = pow(atmosphericGlow, 2.0);
+            
+            vec3 dayColor;
+            vec3 sunsetColor;
+
+            if (planetType == 0) { // Earth
+                dayColor = vec3(0.3, 0.6, 1.0) * atmosphericGlow;
+                sunsetColor = vec3(1.0, 0.5, 0.2) * pow(1.0 - atmosphericGlow, 2.0);
+                gl_FragColor = vec4(dayColor + sunsetColor, intensity);
+            } else if (planetType == 1) { // Mars
+                dayColor = vec3(0.9, 0.5, 0.3) * atmosphericGlow * 0.5;
+                sunsetColor = vec3(1.0, 0.7, 0.5) * pow(1.0 - atmosphericGlow, 2.0) * 0.5;
+                gl_FragColor = vec4(dayColor + sunsetColor, intensity * 0.5);
+            } else if (planetType == 2) { // Tatooine
+                dayColor = vec3(0.9, 0.8, 0.6) * atmosphericGlow * 0.8;
+                sunsetColor = vec3(1.0, 0.6, 0.2) * pow(1.0 - atmosphericGlow, 2.0);
+                gl_FragColor = vec4(dayColor + sunsetColor, intensity * 0.7);
+            }
+        }
+    </script>
+
+    <script id="cloud-vertex-shader" type="x-shader/x-vertex">
+        varying vec3 vPosition;
+        void main() {
+            vPosition = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+
+    <script id="cloud-fragment-shader" type="x-shader/x-fragment">
+        uniform float seed;
+        uniform float time;
+        uniform vec3 sunDirection;
+
+        varying vec3 vPosition;
+
+        // Simplex 3D Noise (same as planet vertex shader)
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+        float snoise(vec3 v) {
+            const vec2 C = vec2(1.0/6.0, 1.0/3.0) ;
+            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+            vec3 i  = floor(v + dot(v, C.yyy) );
+            vec3 x0 =   v - i + dot(i, C.xxx) ;
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min( g.xyz, l.zxy );
+            vec3 i2 = max( g.xyz, l.zxy );
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
+            i = mod289(i);
+            vec4 p = permute( permute( permute(
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+            float n_ = 0.142857142857; // 1.0/7.0
+            vec3  ns = n_ * D.wyz - D.xzx;
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_ );
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+            vec4 b0 = vec4( x.xy, y.xy );
+            vec4 b1 = vec4( x.zw, y.zw );
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+            vec3 p0 = vec3(a0.xy,h.x);
+            vec3 p1 = vec3(a0.zw,h.y);
+            vec3 p2 = vec3(a1.xy,h.z);
+            vec3 p3 = vec3(a1.zw,h.w);
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+        }
+
+        void main() {
+            float cloud_cover = snoise(vPosition * 5.0 + time * 0.1 + seed);
+            cloud_cover = smoothstep(0.4, 0.7, cloud_cover);
+            
+            float diffuse = max(0.0, dot(normalize(vPosition), sunDirection));
+            vec3 cloud_color = vec3(1.0, 1.0, 1.0) * diffuse;
+
+            gl_FragColor = vec4(cloud_color, cloud_cover);
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+
+        let scene, camera, renderer, planet, atmosphere, clouds, controls;
+        let sun, clock, asteroid, ring, moon;
+        let activeAsteroid = null;
+
+        const planetStyles = {
+            earth: {
+                terrain: [
+                    { name: 'Ocean Level', id: 'oceanLevel', min: 0.0, max: 0.8, value: 0.4, uniform: 'oceanLevel' },
+                    { name: 'Mountain Height', id: 'mountainHeight', min: 0.0, max: 1.0, value: 0.4, uniform: 'mountainHeight' },
+                    { name: 'Ice Cap Size', id: 'iceCapSize', min: 0.0, max: 1.0, value: 0.3, uniform: 'iceCapSize' },
+                ]
+            },
+            mars: {
+                terrain: [
+                    { name: 'Dust Level', id: 'dustLevel', min: 0.0, max: 1.0, value: 0.5, uniform: 'dustLevel' },
+                    { name: 'Crater Size', id: 'craterSize', min: 0.0, max: 1.0, value: 0.5, uniform: 'craterSize' },
+                    { name: 'Ice Cap Size', id: 'iceCapSize', min: 0.0, max: 1.0, value: 0.1, uniform: 'iceCapSize' },
+                ]
+            },
+            tatooine: {
+                terrain: [
+                    { name: 'Dune Height', id: 'duneHeight', min: 0.0, max: 1.0, value: 0.5, uniform: 'duneHeight' },
+                    { name: 'Rockiness', id: 'rockiness', min: 0.0, max: 1.0, value: 0.5, uniform: 'rockiness' },
+                ]
+            },
+            death_star: {
+                terrain: [
+                    { name: 'Trench Width', id: 'trenchWidth', min: 0.01, max: 0.2, value: 0.05, uniform: 'trenchWidth' },
+                    { name: 'Cannon Size', id: 'cannonSize', min: 0.1, max: 0.5, value: 0.2, uniform: 'cannonSize' },
+                ]
+            }
+        };
+
+        function init() {
+            clock = new THREE.Clock();
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            sun = new THREE.DirectionalLight(0xffffff, 1.5);
+            scene.add(sun);
+
+            const planetGeometry = new THREE.SphereGeometry(1, 128, 128);
+            const planetMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('planet-vertex-shader').textContent,
+                fragmentShader: document.getElementById('planet-fragment-shader').textContent,
+                uniforms: {
+                    planetType: { value: 0 },
+                    seed: { value: Math.random() * 1000 },
+                    sunDirection: { value: new THREE.Vector3() },
+                    oceanLevel: { value: 0.4 },
+                    mountainHeight: { value: 0.4 },
+                    iceCapSize: { value: 0.3 },
+                    dustLevel: { value: 0.5 },
+                    craterSize: { value: 0.5 },
+                    duneHeight: { value: 0.5 },
+                    rockiness: { value: 0.5 },
+                    trenchWidth: { value: 0.05 },
+                    cannonSize: { value: 0.2 },
+                }
+            });
+            planet = new THREE.Mesh(planetGeometry, planetMaterial);
+            scene.add(planet);
+
+            const atmosphereGeometry = new THREE.SphereGeometry(1.05, 128, 128);
+            const atmosphereMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('atmosphere-vertex-shader').textContent,
+                fragmentShader: document.getElementById('atmosphere-fragment-shader').textContent,
+                uniforms: { 
+                    planetType: { value: 0 },
+                    sunDirection: { value: new THREE.Vector3() } 
+                },
+                blending: THREE.AdditiveBlending,
+                side: THREE.BackSide
+            });
+            atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+            scene.add(atmosphere);
+
+            const cloudGeometry = new THREE.SphereGeometry(1.02, 128, 128);
+            const cloudMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('cloud-vertex-shader').textContent,
+                fragmentShader: document.getElementById('cloud-fragment-shader').textContent,
+                uniforms: {
+                    seed: { value: Math.random() * 1000 },
+                    time: { value: 0 },
+                    sunDirection: { value: new THREE.Vector3() }
+                },
+                transparent: true,
+            });
+            clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+            scene.add(clouds);
+
+            camera.position.z = 2.5;
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enablePan = false;
+            controls.minDistance = 1.2;
+            controls.maxDistance = 5;
+
+            document.getElementById('planet-style').addEventListener('change', (e) => {
+                updatePlanetStyle(e.target.value);
+            });
+            document.getElementById('generate-new-world').addEventListener('click', generateNewWorld);
+            document.getElementById('summon-asteroid').addEventListener('click', summonAsteroid);
+            document.getElementById('time-of-day').addEventListener('input', updateSunPosition);
+            
+            updatePlanetStyle('earth');
+            updateSunPosition();
+            animate();
+        }
+
+        function generateNewWorld() {
+            const newSeed = Math.random() * 1000;
+            planet.material.uniforms.seed.value = newSeed;
+            clouds.material.uniforms.seed.value = newSeed;
+            if (ring) scene.remove(ring);
+            if (moon) scene.remove(moon);
+        }
+
+        function updateSunPosition() {
+            const angle = (document.getElementById('time-of-day').value / 360) * 2 * Math.PI;
+            const sunPosition = new THREE.Vector3(Math.cos(angle), Math.sin(angle) * 0.2, Math.sin(angle));
+            sun.position.copy(sunPosition);
+            
+            const normalizedSunDir = sunPosition.clone().normalize();
+            planet.material.uniforms.sunDirection.value = normalizedSunDir;
+            atmosphere.material.uniforms.sunDirection.value = normalizedSunDir;
+            clouds.material.uniforms.sunDirection.value = normalizedSunDir;
+        }
+
+        function updatePlanetStyle(style) {
+            updateTerrainControls(style);
+            if (style === 'earth') {
+                planet.material.uniforms.planetType.value = 0;
+                atmosphere.material.uniforms.planetType.value = 0;
+                clouds.visible = true;
+                atmosphere.visible = true;
+            } else if (style === 'mars') {
+                planet.material.uniforms.planetType.value = 1;
+                atmosphere.material.uniforms.planetType.value = 1;
+                clouds.visible = false;
+                atmosphere.visible = true;
+            } else if (style === 'tatooine') {
+                planet.material.uniforms.planetType.value = 2;
+                atmosphere.material.uniforms.planetType.value = 2;
+                clouds.visible = false;
+                atmosphere.visible = true;
+            } else if (style === 'death_star') {
+                planet.material.uniforms.planetType.value = 3;
+                clouds.visible = false;
+                atmosphere.visible = false;
+            }
+        }
+
+        function updateTerrainControls(style) {
+            const container = document.getElementById('terrain-controls');
+            container.innerHTML = '';
+            const styleControls = planetStyles[style].terrain;
+            styleControls.forEach(control => {
+                const el = document.createElement('div');
+                el.classList.add('gui-element');
+                el.innerHTML = `<label for="${control.id}">${control.name}</label>
+                                <input type="range" id="${control.id}" min="${control.min}" max="${control.max}" value="${control.value}" step="0.01">`;
+                container.appendChild(el);
+
+                document.getElementById(control.id).addEventListener('input', (e) => {
+                    planet.material.uniforms[control.uniform].value = parseFloat(e.target.value);
+                });
+                // Set initial value
+                planet.material.uniforms[control.uniform].value = control.value;
+            });
+        }
+
+        function summonAsteroid() {
+            if (activeAsteroid) return;
+            if (ring) scene.remove(ring);
+            if (moon) scene.remove(moon);
+
+            const asteroidGeom = new THREE.IcosahedronGeometry(0.1, 1);
+            const asteroidMat = new THREE.MeshStandardMaterial({ color: 0x888888, flatShading: true });
+            activeAsteroid = new THREE.Mesh(asteroidGeom, asteroidMat);
+            
+            activeAsteroid.position.set(
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10
+            );
+            scene.add(activeAsteroid);
+        }
+
+        function createRing() {
+            const ringGeom = new THREE.TorusGeometry(1.5, 0.1, 2, 100);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide });
+            ring = new THREE.Mesh(ringGeom, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            scene.add(ring);
+        }
+
+        function createMoon() {
+            const moonGeom = new THREE.SphereGeometry(0.1, 32, 32);
+            const moonMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+            moon = new THREE.Mesh(moonGeom, moonMat);
+            moon.position.set(1.5, 0, 0);
+            scene.add(moon);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            clouds.material.uniforms.time.value += delta;
+            planet.rotation.y += 0.01 * delta;
+            clouds.rotation.y += 0.015 * delta;
+            atmosphere.rotation.y += 0.015 * delta;
+
+            if (activeAsteroid) {
+                const direction = new THREE.Vector3().subVectors(planet.position, activeAsteroid.position).normalize();
+                activeAsteroid.position.add(direction.multiplyScalar(delta * 5));
+                if (activeAsteroid.position.distanceTo(planet.position) < 1) {
+                    scene.remove(activeAsteroid);
+                    activeAsteroid = null;
+                    if (Math.random() > 0.5) {
+                        createRing();
+                    } else {
+                        createMoon();
+                    }
+                }
+            }
+
+            if (ring) {
+                ring.rotation.z += 0.01 * delta;
+            }
+            if (moon) {
+                moon.position.x = Math.cos(time * 0.5) * 1.5;
+                moon.position.z = Math.sin(time * 0.5) * 1.5;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
