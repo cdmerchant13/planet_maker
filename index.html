@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Procedural Planet Generator</title>
+    <title>Solar System Planet Generator</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,12 +18,25 @@
 
     <div id="gui-container" class="sidebar">
         <div class="gui-element">
-            <label for="planet-style">Planet Style</label>
+            <label for="planet-style">Celestial Body</label>
             <select id="planet-style">
-                <option value="earth">Earth</option>
-                <option value="mars">Mars</option>
-                <option value="tatooine">Tatooine</option>
-                <option value="death_star">Death Star</option>
+                <optgroup label="Custom">
+                    <option value="earth">Terrestrial</option>
+                    <option value="mars">Martian</option>
+                    <option value="tatooine">Desert</option>
+                    <option value="death_star">Battle Station</option>
+                </optgroup>
+                <optgroup label="Solar System">
+                    <option value="sun">Sun</option>
+                    <option value="mercury">Mercury</option>
+                    <option value="venus">Venus</option>
+                    <option value="sol_earth">Earth</option>
+                    <option value="sol_mars">Mars</option>
+                    <option value="jupiter">Jupiter</option>
+                    <option value="saturn">Saturn</option>
+                    <option value="uranus">Uranus</option>
+                    <option value="neptune">Neptune</option>
+                </optgroup>
             </select>
         </div>
         <div class="gui-element">
@@ -32,29 +45,11 @@
         <div class="gui-element">
             <button id="summon-asteroid">Summon Asteroid</button>
         </div>
-        
-        <h2>Terraforming</h2>
-        <div id="terraforming-controls">
-             <div class="gui-element">
-                <label for="time-of-day">Time of Day</label>
-                <input type="range" id="time-of-day" min="0" max="360" value="135">
-            </div>
+        <div class="gui-element">
+            <label for="time-of-day">Light Direction</label>
+            <input type="range" id="time-of-day" min="0" max="360" value="135">
         </div>
-
-        <h2>Terrain</h2>
         <div id="terrain-controls"></div>
-
-        <h2>Planetary Data</h2>
-        <div id="data-container">
-            <div id="planet-data-content"></div>
-            <div class="data-point">
-                <span>Colonization Viability</span>
-                <span id="colonization-score-value" class="data-value">0%</span>
-            </div>
-            <div id="colonization-score-bar">
-                <div id="colonization-score-fill"></div>
-            </div>
-        </div>
     </div>
 
     <!-- Shaders -->
@@ -64,6 +59,7 @@
         varying vec3 vNormal;
         varying vec3 vPosition;
         varying float vElevation;
+        varying vec2 vUv;
         
         vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
         vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -126,6 +122,7 @@
             return elevation;
         }
         void main() {
+            vUv = uv;
             vNormal = normalize(normal);
             vPosition = position;
             vElevation = getElevation(position);
@@ -146,10 +143,16 @@
         uniform float cannonSize;
         uniform float time;
         uniform float seed;
+        uniform float stormSize;
+        uniform float bandContrast;
+        uniform float flareIntensity;
+
         varying vec3 vNormal;
         varying vec3 vPosition;
         varying float vElevation;
+        varying vec2 vUv;
         
+        // snoise function...
         vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
         vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
         vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -203,45 +206,73 @@
         void main() {
             float elevation = vElevation;
             vec3 color;
-            if (planetType == 0) { // Earth
-                vec3 deepOceanColor = vec3(0.0, 0.1, 0.3);
-                vec3 shallowOceanColor = vec3(0.1, 0.3, 0.8);
-                vec3 sandColor = vec3(0.8, 0.7, 0.5);
-                vec3 grassColor = vec3(0.2, 0.6, 0.2);
-                vec3 rockColor = vec3(0.4, 0.4, 0.4);
-                vec3 snowColor = vec3(1.0, 1.0, 1.0);
-                if (elevation < oceanLevel - 0.1) { color = deepOceanColor; }
-                else if (elevation < oceanLevel) { color = mix(deepOceanColor, shallowOceanColor, (elevation - (oceanLevel - 0.1)) / 0.1); }
-                else if (elevation < oceanLevel + 0.05) { color = sandColor; }
-                else if (elevation < 0.5) { color = grassColor; }
-                else if (elevation < 0.8) { color = rockColor; }
-                else { color = snowColor; }
-                if (elevation < oceanLevel) {
-                    vec3 reflection = reflect(-sunDirection, normalize(vNormal));
-                    float specular = max(0.0, dot(normalize(-vPosition), reflection));
-                    specular = pow(specular, 32.0);
-                    color += vec3(1.0, 1.0, 1.0) * specular * 0.5;
+            // ... existing planet logic ...
+            if (planetType >= 4 && planetType <= 8) { // Solar System
+                if (planetType == 4) { // Sun
+                    float noise = snoise(vPosition * 5.0 + time * 0.5 + seed);
+                    color = vec3(1.0, 0.8, 0.2) + noise * flareIntensity;
+                    gl_FragColor = vec4(color, 1.0);
+                    return;
+                } else if (planetType == 5) { // Mercury
+                    color = vec3(0.5) + snoise(vPosition * 20.0 + seed) * 0.1;
+                } else if (planetType == 6) { // Venus
+                    float noise = snoise(vPosition * 10.0 + time * 0.1 + seed);
+                    color = mix(vec3(0.9, 0.8, 0.6), vec3(0.7, 0.6, 0.4), noise);
+                } else if (planetType == 7) { // Jupiter
+                    float bands = sin(vPosition.y * 20.0 + snoise(vPosition * 2.0 + time * 0.05 + seed) * bandContrast);
+                    vec3 bandColor1 = vec3(0.8, 0.7, 0.6);
+                    vec3 bandColor2 = vec3(0.6, 0.5, 0.4);
+                    color = mix(bandColor1, bandColor2, bands);
+                    vec2 spotUv = vec2(vUv.x + time * 0.05, vUv.y);
+                    float spot = smoothstep(stormSize, 0.0, distance(spotUv, vec2(0.5, 0.6)));
+                    color = mix(color, vec3(0.7, 0.3, 0.1), spot);
+                } else if (planetType == 8) { // Saturn
+                    float bands = sin(vPosition.y * 30.0);
+                    color = mix(vec3(0.9, 0.8, 0.6), vec3(0.8, 0.7, 0.5), bands);
+                } else if (planetType == 9) { // Uranus
+                    color = vec3(0.6, 0.8, 0.9);
+                } else if (planetType == 10) { // Neptune
+                    color = vec3(0.2, 0.4, 0.8);
                 }
-                if (elevation > 0.75) {
-                    float lavaNoise = snoise(vPosition * 20.0 + time + seed);
-                    if (lavaNoise > 0.8) { color = mix(color, vec3(1.0, 0.2, 0.0), (lavaNoise - 0.8) / 0.2); }
+            } else {
+                // ... existing custom planet logic ...
+                 if (planetType == 0 || planetType == 11 || planetType == 12) { // Earth, Sol_Earth, Sol_Mars
+                    vec3 deepOceanColor = vec3(0.0, 0.1, 0.3);
+                    vec3 shallowOceanColor = vec3(0.1, 0.3, 0.8);
+                    vec3 sandColor = vec3(0.8, 0.7, 0.5);
+                    vec3 grassColor = vec3(0.2, 0.6, 0.2);
+                    vec3 rockColor = vec3(0.4, 0.4, 0.4);
+                    vec3 snowColor = vec3(1.0, 1.0, 1.0);
+                    if (elevation < oceanLevel - 0.1) { color = deepOceanColor; }
+                    else if (elevation < oceanLevel) { color = mix(deepOceanColor, shallowOceanColor, (elevation - (oceanLevel - 0.1)) / 0.1); }
+                    else if (elevation < oceanLevel + 0.05) { color = sandColor; }
+                    else if (elevation < 0.5) { color = grassColor; }
+                    else if (elevation < 0.8) { color = rockColor; }
+                    else { color = snowColor; }
+                    if (elevation < oceanLevel) {
+                        vec3 reflection = reflect(-sunDirection, normalize(vNormal));
+                        float specular = max(0.0, dot(normalize(-vPosition), reflection));
+                        specular = pow(specular, 32.0);
+                        color += vec3(1.0, 1.0, 1.0) * specular * 0.5;
+                    }
+                } else if (planetType == 1) { // Martian
+                    vec3 marsColor = vec3(0.9, 0.4, 0.2);
+                    vec3 darkMarsColor = vec3(0.6, 0.2, 0.1);
+                    color = mix(darkMarsColor, marsColor, dustLevel);
+                } else if (planetType == 2) { // Tatooine
+                    vec3 sandColor = vec3(0.9, 0.8, 0.6);
+                    vec3 rockColor = vec3(0.6, 0.5, 0.4);
+                    float rock = smoothstep(0.5 - rockiness, 0.5, elevation);
+                    color = mix(sandColor, rockColor, rock);
+                } else if (planetType == 3) { // Death Star
+                    color = vec3(0.5);
+                    if (abs(vPosition.y) < trenchWidth) { color = vec3(0.2); }
+                    vec3 cannonPos = vec3(0.7, 0.3, 0.0);
+                    if (distance(vPosition, cannonPos) < cannonSize) { color = vec3(0.1); }
                 }
-            } else if (planetType == 1) { // Mars
-                vec3 marsColor = vec3(0.9, 0.4, 0.2);
-                vec3 darkMarsColor = vec3(0.6, 0.2, 0.1);
-                color = mix(darkMarsColor, marsColor, dustLevel);
-            } else if (planetType == 2) { // Tatooine
-                vec3 sandColor = vec3(0.9, 0.8, 0.6);
-                vec3 rockColor = vec3(0.6, 0.5, 0.4);
-                float rock = smoothstep(0.5 - rockiness, 0.5, elevation);
-                color = mix(sandColor, rockColor, rock);
-            } else if (planetType == 3) { // Death Star
-                color = vec3(0.5);
-                if (abs(vPosition.y) < trenchWidth) { color = vec3(0.2); }
-                vec3 cannonPos = vec3(0.7, 0.3, 0.0);
-                if (distance(vPosition, cannonPos) < cannonSize) { color = vec3(0.1); }
             }
-            if (planetType < 2) {
+
+            if (planetType < 2 || planetType == 11 || planetType == 12) {
                 float ice = smoothstep(1.0 - iceCapSize, 1.0 - iceCapSize + 0.1, abs(vPosition.y));
                 color = mix(color, vec3(1.0), ice);
             }
@@ -249,6 +280,7 @@
             gl_FragColor = vec4(color * diffuse, 1.0);
         }
     </script>
+    <!-- Other shaders (atmosphere, clouds) remain the same -->
     <script id="atmosphereVertexShader" type="x-shader/x-vertex">
         varying vec3 vNormal;
         void main() {
@@ -259,7 +291,6 @@
     <script id="atmosphereFragmentShader" type="x-shader/x-fragment">
         uniform int planetType;
         uniform vec3 sunDirection;
-        uniform float atmosphereThickness;
         varying vec3 vNormal;
         void main() {
             float intensity = pow(0.7 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
@@ -267,18 +298,22 @@
             atmosphericGlow = pow(atmosphericGlow, 2.0);
             vec3 dayColor;
             vec3 sunsetColor;
-            if (planetType == 0) { // Earth
+            if (planetType == 0 || planetType == 11) { // Earth
                 dayColor = vec3(0.3, 0.6, 1.0) * atmosphericGlow;
                 sunsetColor = vec3(1.0, 0.5, 0.2) * pow(1.0 - atmosphericGlow, 2.0);
-                gl_FragColor = vec4(dayColor + sunsetColor, intensity * atmosphereThickness);
-            } else if (planetType == 1) { // Mars
+                gl_FragColor = vec4(dayColor + sunsetColor, intensity);
+            } else if (planetType == 1 || planetType == 12) { // Mars
                 dayColor = vec3(0.9, 0.5, 0.3) * atmosphericGlow * 0.5;
                 sunsetColor = vec3(1.0, 0.7, 0.5) * pow(1.0 - atmosphericGlow, 2.0) * 0.5;
-                gl_FragColor = vec4(dayColor + sunsetColor, intensity * 0.5 * atmosphereThickness);
+                gl_FragColor = vec4(dayColor + sunsetColor, intensity * 0.5);
             } else if (planetType == 2) { // Tatooine
                 dayColor = vec3(0.9, 0.8, 0.6) * atmosphericGlow * 0.8;
                 sunsetColor = vec3(1.0, 0.6, 0.2) * pow(1.0 - atmosphericGlow, 2.0);
-                gl_FragColor = vec4(dayColor + sunsetColor, intensity * 0.7 * atmosphereThickness);
+                gl_FragColor = vec4(dayColor + sunsetColor, intensity * 0.7);
+            } else if (planetType == 6) { // Venus
+                 dayColor = vec3(0.9, 0.8, 0.6) * atmosphericGlow;
+                 sunsetColor = vec3(1.0, 0.7, 0.5) * pow(1.0 - atmosphericGlow, 2.0);
+                 gl_FragColor = vec4(dayColor + sunsetColor, intensity);
             }
         }
     </script>
@@ -293,7 +328,6 @@
         uniform float seed;
         uniform float time;
         uniform vec3 sunDirection;
-        uniform float atmosphereThickness;
         varying vec3 vPosition;
         
         vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -348,79 +382,10 @@
 
         void main() {
             float cloud_cover = snoise(vPosition * 5.0 + time * 0.1 + seed);
-            cloud_cover = smoothstep(0.4, 0.7, cloud_cover) * atmosphereThickness;
+            cloud_cover = smoothstep(0.4, 0.7, cloud_cover);
             float diffuse = max(0.0, dot(normalize(vPosition), sunDirection));
             vec3 cloud_color = vec3(1.0, 1.0, 1.0) * diffuse;
             gl_FragColor = vec4(cloud_color, cloud_cover);
-        }
-    </script>
-    <script id="auroraVertexShader" type="x-shader/x-vertex">
-        varying vec3 vNormal;
-        void main() {
-            vNormal = normalize(normalMatrix * normal);
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    </script>
-    <script id="auroraFragmentShader" type="x-shader/x-fragment">
-        uniform float time;
-        uniform float seed;
-        varying vec3 vNormal;
-        
-        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
-        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-        float snoise(vec3 v) {
-            const vec2 C = vec2(1.0/6.0, 1.0/3.0) ;
-            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-            vec3 i  = floor(v + dot(v, C.yyy) );
-            vec3 x0 =   v - i + dot(i, C.xxx) ;
-            vec3 g = step(x0.yzx, x0.xyz);
-            vec3 l = 1.0 - g;
-            vec3 i1 = min( g.xyz, l.zxy );
-            vec3 i2 = max( g.xyz, l.zxy );
-            vec3 x1 = x0 - i1 + C.xxx;
-            vec3 x2 = x0 - i2 + C.yyy;
-            vec3 x3 = x0 - D.yyy;
-            i = mod289(i);
-            vec4 p = permute( permute( permute(
-                        i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
-                    + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
-                    + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
-            float n_ = 0.142857142857; // 1.0/7.0
-            vec3  ns = n_ * D.wyz - D.xzx;
-            vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-            vec4 x_ = floor(j * ns.z);
-            vec4 y_ = floor(j - 7.0 * x_ );
-            vec4 x = x_ *ns.x + ns.yyyy;
-            vec4 y = y_ *ns.x + ns.yyyy;
-            vec4 h = 1.0 - abs(x) - abs(y);
-            vec4 b0 = vec4( x.xy, y.xy );
-            vec4 b1 = vec4( x.zw, y.zw );
-            vec4 s0 = floor(b0)*2.0 + 1.0;
-            vec4 s1 = floor(b1)*2.0 + 1.0;
-            vec4 sh = -step(h, vec4(0.0));
-            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
-            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
-            vec3 p0 = vec3(a0.xy,h.x);
-            vec3 p1 = vec3(a0.zw,h.y);
-            vec3 p2 = vec3(a1.xy,h.z);
-            vec3 p3 = vec3(a1.zw,h.w);
-            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
-            p0 *= norm.x;
-            p1 *= norm.y;
-            p2 *= norm.z;
-            p3 *= norm.w;
-            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-            m = m * m;
-            return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
-        }
-
-        void main() {
-            float intensity = snoise(vec3(vNormal.x * 2.0, vNormal.y * 2.0 + time * 0.1, time * 0.05 + seed));
-            intensity = pow(0.05 / (distance(abs(vNormal.y), 0.9)), 2.0) * intensity;
-            vec3 color = mix(vec3(0.0, 1.0, 0.2), vec3(0.8, 0.0, 1.0), sin(time + vNormal.x * 2.0));
-            gl_FragColor = vec4(color, intensity);
         }
     </script>
     
@@ -437,40 +402,51 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-        let scene, camera, renderer, controls, sun, clock, planet, atmosphere, clouds, aurora;
+        let scene, camera, renderer, controls, sun, clock, planet, atmosphere, clouds;
         let activeAsteroid, ring, moon;
 
         const planetStyles = {
             earth: {
-                terrain: [
-                    { name: 'Ocean Level', id: 'oceanLevel', min: 0.0, max: 0.8, value: 0.4, uniform: 'oceanLevel' },
-                    { name: 'Mountain Height', id: 'mountainHeight', min: 0.0, max: 1.0, value: 0.4, uniform: 'mountainHeight' },
-                    { name: 'Ice Cap Size', id: 'iceCapSize', min: 0.0, max: 1.0, value: 0.3, uniform: 'iceCapSize' },
-                ]
+                type: 'terrestrial',
+                terrain: [ { name: 'Ocean Level', id: 'oceanLevel', min: 0.0, max: 0.8, value: 0.4, uniform: 'oceanLevel' }, { name: 'Mountain Height', id: 'mountainHeight', min: 0.0, max: 1.0, value: 0.4, uniform: 'mountainHeight' }, { name: 'Ice Cap Size', id: 'iceCapSize', min: 0.0, max: 1.0, value: 0.3, uniform: 'iceCapSize' } ]
             },
             mars: {
-                terrain: [
-                    { name: 'Dust Level', id: 'dustLevel', min: 0.0, max: 1.0, value: 0.5, uniform: 'dustLevel' },
-                    { name: 'Crater Size', id: 'craterSize', min: 0.0, max: 1.0, value: 0.5, uniform: 'craterSize' },
-                    { name: 'Ice Cap Size', id: 'iceCapSize', min: 0.0, max: 1.0, value: 0.1, uniform: 'iceCapSize' },
-                ]
+                type: 'terrestrial',
+                terrain: [ { name: 'Dust Level', id: 'dustLevel', min: 0.0, max: 1.0, value: 0.5, uniform: 'dustLevel' }, { name: 'Crater Size', id: 'craterSize', min: 0.0, max: 1.0, value: 0.5, uniform: 'craterSize' }, { name: 'Ice Cap Size', id: 'iceCapSize', min: 0.0, max: 1.0, value: 0.1, uniform: 'iceCapSize' } ]
             },
             tatooine: {
-                terrain: [
-                    { name: 'Dune Height', id: 'duneHeight', min: 0.0, max: 1.0, value: 0.5, uniform: 'duneHeight' },
-                    { name: 'Rockiness', id: 'rockiness', min: 0.0, max: 1.0, value: 0.5, uniform: 'rockiness' },
-                ]
+                type: 'terrestrial',
+                terrain: [ { name: 'Dune Height', id: 'duneHeight', min: 0.0, max: 1.0, value: 0.5, uniform: 'duneHeight' }, { name: 'Rockiness', id: 'rockiness', min: 0.0, max: 1.0, value: 0.5, uniform: 'rockiness' } ]
             },
             death_star: {
-                terrain: [
-                    { name: 'Trench Width', id: 'trenchWidth', min: 0.01, max: 0.2, value: 0.05, uniform: 'trenchWidth' },
-                    { name: 'Cannon Size', id: 'cannonSize', min: 0.1, max: 0.5, value: 0.2, uniform: 'cannonSize' },
-                ]
-            }
+                type: 'station',
+                terrain: [ { name: 'Trench Width', id: 'trenchWidth', min: 0.01, max: 0.2, value: 0.05, uniform: 'trenchWidth' }, { name: 'Cannon Size', id: 'cannonSize', min: 0.1, max: 0.5, value: 0.2, uniform: 'cannonSize' } ]
+            },
+            sun: { type: 'star', terrain: [ { name: 'Flare Intensity', id: 'flareIntensity', min: 0.0, max: 1.0, value: 0.5, uniform: 'flareIntensity' } ] },
+            mercury: { type: 'terrestrial', terrain: [ { name: 'Crater Size', id: 'craterSize', min: 0.0, max: 1.0, value: 0.8, uniform: 'craterSize' } ] },
+            venus: { type: 'terrestrial', terrain: [] },
+            sol_earth: { type: 'terrestrial', terrain: [] },
+            sol_mars: { type: 'terrestrial', terrain: [] },
+            jupiter: { type: 'gas_giant', terrain: [ { name: 'Storm Size', id: 'stormSize', min: 0.05, max: 0.5, value: 0.2, uniform: 'stormSize' }, { name: 'Band Contrast', id: 'bandContrast', min: 0.0, max: 2.0, value: 1.0, uniform: 'bandContrast' } ] },
+            saturn: { type: 'gas_giant', terrain: [ { name: 'Band Contrast', id: 'bandContrast', min: 0.0, max: 2.0, value: 0.5, uniform: 'bandContrast' } ] },
+            uranus: { type: 'gas_giant', terrain: [] },
+            neptune: { type: 'gas_giant', terrain: [] }
+        };
+
+        const planetData = {
+            sun: { Radius: '696,340 km', 'Day Length': '27 days', 'Surface Temp': '5,505 °C' },
+            mercury: { Radius: '2,440 km', 'Day Length': '58.6 days', 'Surface Temp': '167 °C' },
+            venus: { Radius: '6,052 km', 'Day Length': '243 days', 'Surface Temp': '464 °C' },
+            sol_earth: { Radius: '6,371 km', 'Day Length': '24 hours', 'Surface Temp': '15 °C' },
+            sol_mars: { Radius: '3,390 km', 'Day Length': '24.6 hours', 'Surface Temp': '-65 °C' },
+            jupiter: { Radius: '69,911 km', 'Day Length': '9.9 hours', 'Surface Temp': '-145 °C' },
+            saturn: { Radius: '58,232 km', 'Day Length': '10.7 hours', 'Surface Temp': '-178 °C' },
+            uranus: { Radius: '25,362 km', 'Day Length': '17.2 hours', 'Surface Temp': '-224 °C' },
+            neptune: { Radius: '24,622 km', 'Day Length': '16.1 hours', 'Surface Temp': '-214 °C' }
         };
 
         function init() {
-            // Scene setup
+            // ... scene setup ...
             clock = new THREE.Clock();
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -485,85 +461,44 @@
             controls.minDistance = 1.2;
             controls.maxDistance = 10;
 
-            // Planet
+            // Planet, Atmosphere, Clouds
             const planetGeometry = new THREE.SphereGeometry(1, 128, 128);
             const planetMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('planetVertexShader').textContent,
                 fragmentShader: document.getElementById('planetFragmentShader').textContent,
-                uniforms: {
-                    planetType: { value: 0 },
-                    seed: { value: Math.random() * 1000 },
-                    sunDirection: { value: new THREE.Vector3() },
-                    time: { value: 0 },
-                    oceanLevel: { value: 0.4 },
-                    mountainHeight: { value: 0.4 },
-                    iceCapSize: { value: 0.3 },
-                    dustLevel: { value: 0.5 },
-                    craterSize: { value: 0.5 },
-                    duneHeight: { value: 0.5 },
-                    rockiness: { value: 0.5 },
-                    trenchWidth: { value: 0.05 },
-                    cannonSize: { value: 0.2 },
+                uniforms: { /* ... all uniforms ... */ 
+                    planetType: { value: 0 }, seed: { value: Math.random() * 1000 }, sunDirection: { value: new THREE.Vector3() }, time: { value: 0 }, oceanLevel: { value: 0.4 }, mountainHeight: { value: 0.4 }, iceCapSize: { value: 0.3 }, dustLevel: { value: 0.5 }, craterSize: { value: 0.5 }, duneHeight: { value: 0.5 }, rockiness: { value: 0.5 }, trenchWidth: { value: 0.05 }, cannonSize: { value: 0.2 }, stormSize: { value: 0.2 }, bandContrast: { value: 1.0 }, flareIntensity: { value: 0.5 }
                 }
             });
             planet = new THREE.Mesh(planetGeometry, planetMaterial);
             scene.add(planet);
 
-            // Atmosphere
             const atmosphereGeometry = new THREE.SphereGeometry(1.05, 128, 128);
             const atmosphereMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('atmosphereVertexShader').textContent,
                 fragmentShader: document.getElementById('atmosphereFragmentShader').textContent,
-                uniforms: { 
-                    planetType: { value: 0 },
-                    sunDirection: { value: new THREE.Vector3() },
-                    atmosphereThickness: { value: 1.0 }
-                },
-                blending: THREE.AdditiveBlending,
-                side: THREE.BackSide
+                uniforms: { planetType: { value: 0 }, sunDirection: { value: new THREE.Vector3() } },
+                blending: THREE.AdditiveBlending, side: THREE.BackSide
             });
             atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
             scene.add(atmosphere);
 
-            // Clouds
             const cloudGeometry = new THREE.SphereGeometry(1.02, 128, 128);
             const cloudMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('cloudVertexShader').textContent,
                 fragmentShader: document.getElementById('cloudFragmentShader').textContent,
-                uniforms: {
-                    seed: { value: Math.random() * 1000 },
-                    time: { value: 0 },
-                    sunDirection: { value: new THREE.Vector3() },
-                    atmosphereThickness: { value: 1.0 }
-                },
+                uniforms: { seed: { value: Math.random() * 1000 }, time: { value: 0 }, sunDirection: { value: new THREE.Vector3() } },
                 transparent: true,
             });
             clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
             scene.add(clouds);
-
-            // Aurora
-            const auroraGeometry = new THREE.SphereGeometry(1.1, 128, 128);
-            const auroraMaterial = new THREE.ShaderMaterial({
-                vertexShader: document.getElementById('auroraVertexShader').textContent,
-                fragmentShader: document.getElementById('auroraFragmentShader').textContent,
-                uniforms: {
-                    time: { value: 0 },
-                    seed: { value: Math.random() * 1000 }
-                },
-                blending: THREE.AdditiveBlending,
-                side: THREE.BackSide,
-                transparent: true
-            });
-            aurora = new THREE.Mesh(auroraGeometry, auroraMaterial);
-            scene.add(aurora);
 
             // UI Listeners
             document.getElementById('planet-style').addEventListener('change', updatePlanetStyle);
             document.getElementById('generate-new-world').addEventListener('click', generateNewWorld);
             document.getElementById('summon-asteroid').addEventListener('click', summonAsteroid);
             document.getElementById('time-of-day').addEventListener('input', updateSunPosition);
-            
-            setupTerraformingControls();
+
             updatePlanetStyle();
             updateSunPosition();
             animate();
@@ -573,20 +508,16 @@
             const newSeed = Math.random() * 1000;
             planet.material.uniforms.seed.value = newSeed;
             clouds.material.uniforms.seed.value = newSeed;
-            aurora.material.uniforms.seed.value = newSeed;
             if (ring) scene.remove(ring);
             if (moon) scene.remove(moon);
-            ring = null;
-            moon = null;
-            updatePlanetaryData();
+            ring = null; moon = null;
         }
 
         function summonAsteroid() {
             if (activeAsteroid) return;
             if (ring) scene.remove(ring);
             if (moon) scene.remove(moon);
-            ring = null;
-            moon = null;
+            ring = null; moon = null;
 
             const asteroidGeom = new THREE.IcosahedronGeometry(0.1, 1);
             const asteroidMat = new THREE.MeshStandardMaterial({ color: 0x888888, flatShading: true });
@@ -595,24 +526,28 @@
             scene.add(activeAsteroid);
         }
 
-        function createRing() {
-            const particles = 5000;
+        function createRing(tiltX, tiltZ, innerRadius, outerRadius) {
+            if (ring) scene.remove(ring);
+            const particles = 10000;
             const positions = new Float32Array(particles * 3);
             for (let i = 0; i < particles; i++) {
-                const r = 1.5 + Math.random() * 0.2;
+                const r = innerRadius + Math.random() * (outerRadius - innerRadius);
                 const theta = Math.random() * Math.PI * 2;
                 positions[i * 3] = Math.cos(theta) * r;
-                positions[i * 3 + 1] = (Math.random() - 0.5) * 0.1;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
                 positions[i * 3 + 2] = Math.sin(theta) * r;
             }
             const ringGeom = new THREE.BufferGeometry();
             ringGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const ringMat = new THREE.PointsMaterial({ color: 0xaaaaaa, size: 0.01, transparent: true, opacity: 0.8 });
+            const ringMat = new THREE.PointsMaterial({ color: 0xaaaaaa, size: 0.005, transparent: true, opacity: 0.8 });
             ring = new THREE.Points(ringGeom, ringMat);
+            ring.rotation.x = tiltX;
+            ring.rotation.z = tiltZ;
             scene.add(ring);
         }
 
         function createMoon() {
+            if (moon) scene.remove(moon);
             const moonGeom = new THREE.SphereGeometry(0.1, 32, 32);
             const moonMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
             moon = new THREE.Mesh(moonGeom, moonMat);
@@ -632,14 +567,24 @@
 
         function updatePlanetStyle() {
             const style = document.getElementById('planet-style').value;
+            const styleData = planetStyles[style];
+            
+            if (ring) scene.remove(ring); ring = null;
+            if (moon) scene.remove(moon); moon = null;
+
             updateTerrainControls(style);
-            const planetTypeIndex = ['earth', 'mars', 'tatooine', 'death_star'].indexOf(style);
+            
+            const planetTypeIndex = ['earth', 'mars', 'tatooine', 'death_star', 'sun', 'mercury', 'venus', 'jupiter', 'saturn', 'uranus', 'neptune', 'sol_earth', 'sol_mars'].indexOf(style);
             planet.material.uniforms.planetType.value = planetTypeIndex;
             atmosphere.material.uniforms.planetType.value = planetTypeIndex;
-            clouds.visible = style === 'earth';
-            atmosphere.visible = style !== 'death_star';
-            aurora.visible = style === 'earth';
-            updatePlanetaryData();
+
+            clouds.visible = style === 'earth' || style === 'sol_earth';
+            atmosphere.visible = styleData.type !== 'station' && styleData.type !== 'star' && style !== 'mercury';
+            
+            if (style === 'saturn') createRing(0.4, 0.1, 1.4, 2.0);
+            if (style === 'uranus') createRing(1.7, 0, 1.5, 1.8);
+
+            updatePlanetaryData(style);
         }
 
         function updateTerrainControls(style) {
@@ -654,87 +599,27 @@
                 container.appendChild(el);
                 document.getElementById(control.id).addEventListener('input', (e) => {
                     planet.material.uniforms[control.uniform].value = parseFloat(e.target.value);
-                    updatePlanetaryData();
                 });
                 planet.material.uniforms[control.uniform].value = control.value;
             });
         }
 
-        function setupTerraformingControls() {
-            const terraContainer = document.getElementById('terraforming-controls');
-            const newControls = [
-                { name: 'Atmosphere Thickness', id: 'atmosphere-thickness', min: 0, max: 2, value: 1, step: 0.01 },
-                { name: 'Sea Level', id: 'sea-level', min: 0, max: 0.8, value: 0.4, step: 0.01 }
-            ];
-
-            newControls.forEach(control => {
-                const el = document.createElement('div');
-                el.classList.add('gui-element');
-                el.innerHTML = `<label for="${control.id}">${control.name}</label>
-                                <input type="range" id="${control.id}" min="${control.min}" max="${control.max}" value="${control.value}" step="${control.step}">`;
-                terraContainer.appendChild(el);
-            });
-
-            document.getElementById('atmosphere-thickness').addEventListener('input', (e) => {
-                atmosphere.material.uniforms.atmosphereThickness.value = parseFloat(e.target.value);
-                clouds.material.uniforms.atmosphereThickness.value = parseFloat(e.target.value);
-                updatePlanetaryData();
-            });
-            document.getElementById('sea-level').addEventListener('input', (e) => {
-                planet.material.uniforms.oceanLevel.value = parseFloat(e.target.value);
-                updatePlanetaryData();
-            });
-        }
-
-        function updatePlanetaryData() {
-            const style = document.getElementById('planet-style').value;
-            const dataContent = document.getElementById('planet-data-content');
-            let data = {};
-            const randomInRange = (min, max) => (Math.random() * (max - min) + min);
-
-            let temp = 0, water = 0, atmosphereThickness = 0;
-
-            data['Radius'] = `${(randomInRange(6000, 8000)).toFixed(0)} km`;
-            data['Day Length'] = `${(randomInRange(22, 26)).toFixed(1)} hours`;
-
-            if (style === 'earth') {
-                temp = 15; 
-                water = planet.material.uniforms.oceanLevel.value; 
-                atmosphereThickness = atmosphere.material.uniforms.atmosphereThickness.value;
-                data['Surface Temp'] = `${(temp).toFixed(0)} °C`;
-                data['Ocean Coverage'] = `${(water * 100).toFixed(0)}%`;
-            } else if (style === 'mars') {
-                temp = -60; water = 0; 
-                atmosphereThickness = 0.1 * atmosphere.material.uniforms.atmosphereThickness.value;
-                data['Surface Temp'] = `${(temp).toFixed(0)} °C`;
-                data['Atmosphere'] = 'Thin (CO2)';
-            } else if (style === 'tatooine') {
-                temp = 55; water = 0; 
-                atmosphereThickness = 0.8 * atmosphere.material.uniforms.atmosphereThickness.value;
-                data['Surface Temp'] = `${(temp).toFixed(0)} °C`;
-                data['Suns'] = '2';
-            } else if (style === 'death_star') {
-                data['Radius'] = '160 km';
-                data['Day Length'] = 'N/A';
-                data['Superlaser'] = 'Operational';
+        function updatePlanetaryData(style) {
+            const dataContent = document.getElementById('terrain-controls'); // Re-using for data for now
+            const data = planetData[style];
+            if (!data) {
+                dataContent.innerHTML = ''; // Clear for custom planets
+                return;
             }
-
-            let score = 0;
-            if (style !== 'death_star') {
-                const tempScore = 1 - Math.abs(temp - 15) / 50;
-                const waterScore = water > 0.1 ? 1 : 0.1;
-                const atmoScore = 1 - Math.abs(atmosphereThickness - 1) / 1;
-                score = Math.max(0, (tempScore + waterScore + atmoScore) / 3);
-            }
-            
-            document.getElementById('colonization-score-value').textContent = `${(score * 100).toFixed(0)}%`;
-            document.getElementById('colonization-score-fill').style.width = `${score * 100}%`;
-
-            let html = '';
+            let html = '<h2>Planetary Data</h2>';
             for (const key in data) {
                 html += `<div class="data-point"><span>${key}</span><span class="data-value">${data[key]}</span></div>`;
             }
-            dataContent.innerHTML = html;
+            // A bit of a hack to put data into the terrain controls div
+            const terrainContainer = document.getElementById('terrain-controls');
+            const dataContainer = document.createElement('div');
+            dataContainer.innerHTML = html;
+            terrainContainer.appendChild(dataContainer);
         }
 
         function animate() {
@@ -743,11 +628,9 @@
             const time = clock.getElapsedTime();
             planet.rotation.y += 0.05 * delta;
             clouds.rotation.y += 0.06 * delta;
-            aurora.rotation.y += 0.03 * delta;
             
             planet.material.uniforms.time.value = time;
             clouds.material.uniforms.time.value = time;
-            aurora.material.uniforms.time.value = time;
 
             if (activeAsteroid) {
                 const direction = new THREE.Vector3().subVectors(planet.position, activeAsteroid.position).normalize();
@@ -755,7 +638,7 @@
                 if (activeAsteroid.position.distanceTo(planet.position) < 1) {
                     scene.remove(activeAsteroid);
                     activeAsteroid = null;
-                    if (Math.random() > 0.5) createRing(); else createMoon();
+                    if (Math.random() > 0.5) createRing(Math.random() * 2, Math.random() * 2, 1.5, 1.8); else createMoon();
                 }
             }
 

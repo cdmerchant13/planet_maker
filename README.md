@@ -28,8 +28,6 @@ Choose from a variety of preset planet types, each with unique features and cont
 - **Time of Day Slider:** Rotate the sun dynamically for sunrise, noon, or sunset lighting.
 - **Terrain Controls:** Contextual sliders for each planet (e.g., ocean level, crater size, trench width).
 - **Planet Style Selector:** Instantly switch planet types and re-render on the fly.
-- **New:** **Planet Naming Field** to name your custom world.
-- **New:** **Save & Load Presets** via localStorage.
 
 ### 🌌 Visual Enhancements
 - **Volumetric Atmosphere:** Realistic light scattering effects and limb glow.
