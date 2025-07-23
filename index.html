@@ -18,23 +18,31 @@
             width: 100vw; 
             height: 100vh; 
         }
-        #gui-container { 
+        .sidebar {
             position: absolute; 
             top: 20px; 
-            right: 20px; 
             background: rgba(16, 16, 16, 0.7);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             padding: 25px; 
             border-radius: 16px; 
-            width: 320px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        #gui-container { 
+            right: 20px; 
+            width: 320px;
+        }
+        #info-container {
+            left: 20px;
+            width: 320px;
         }
         .gui-element { 
             margin-bottom: 20px; 
         }
-        label { 
+        label, .data-label { 
             display: block; 
             margin-bottom: 8px; 
             font-weight: 600;
@@ -89,21 +97,58 @@
             cursor: pointer;
             border-radius: 50%;
         }
+        h1 {
+            margin-top: 0;
+            font-size: 1.8rem;
+            background: -webkit-linear-gradient(#4a90e2, #50e3c2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #a0a0a0;
+        }
+        a {
+            color: #50e3c2;
+            text-decoration: none;
+        }
+        .data-point {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        .data-value {
+            font-weight: 600;
+            color: #e0e0e0;
+        }
 
-        @media (max-width: 600px) {
-            #gui-container {
+        @media (max-width: 1024px) {
+            .sidebar {
                 width: auto;
                 left: 10px;
                 right: 10px;
                 bottom: 10px;
                 top: auto;
             }
+            #info-container {
+                display: none; /* Hide info on mobile for cleaner view */
+            }
         }
     </style>
 </head>
 <body>
     <div id="container"></div>
-    <div id="gui-container">
+
+    <div id="info-container" class="sidebar">
+        <h1>Planet Generator</h1>
+        <p>Create and explore procedurally generated worlds in real-time. Select a planet style, modify its features using the controls, and watch as unique planets, atmospheres, and celestial bodies come to life.</p>
+        <p>Use your mouse to orbit and zoom. Click "Generate New World" to create a new planet with a random seed.</p>
+        <p>Original idea shamelessly stolen from <a href="https://www.reddit.com/user/Mysterious_Finish543" target="_blank">Mysterious_Finish543</a> on Reddit.</p>
+    </div>
+
+    <div id="gui-container" class="sidebar">
         <div class="gui-element">
             <label for="planet-style">Planet Style</label>
             <select id="planet-style">
@@ -124,6 +169,10 @@
             <input type="range" id="time-of-day" min="0" max="360" value="135">
         </div>
         <div id="terrain-controls"></div>
+        <div id="data-container">
+            <label class="data-label">Planetary Data</label>
+            <div id="planet-data-content"></div>
+        </div>
     </div>
 
     <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
@@ -421,6 +470,7 @@
         let scene, camera, renderer, planet, atmosphere, clouds, controls;
         let sun, clock, asteroid, ring, moon;
         let activeAsteroid = null;
+        let planetaryData = {};
 
         const planetStyles = {
             earth: {
@@ -536,6 +586,9 @@
             clouds.material.uniforms.seed.value = newSeed;
             if (ring) scene.remove(ring);
             if (moon) scene.remove(moon);
+            ring = null;
+            moon = null;
+            updatePlanetaryData();
         }
 
         function updateSunPosition() {
@@ -571,6 +624,7 @@
                 clouds.visible = false;
                 atmosphere.visible = false;
             }
+            updatePlanetaryData();
         }
 
         function updateTerrainControls(style) {
@@ -592,10 +646,48 @@
             });
         }
 
+        function updatePlanetaryData() {
+            const style = document.getElementById('planet-style').value;
+            const dataContent = document.getElementById('planet-data-content');
+            let data = {};
+
+            const randomInRange = (min, max) => (Math.random() * (max - min) + min).toFixed(2);
+
+            data['Radius'] = `${randomInRange(6000, 8000)} km`;
+            data['Day Length'] = `${randomInRange(22, 26)} hours`;
+
+            if (style === 'earth') {
+                data['Surface Temp'] = `${randomInRange(10, 30)} °C`;
+                data['Atmosphere'] = 'Standard';
+                data['Ocean Coverage'] = `${(planet.material.uniforms.oceanLevel.value * 100).toFixed(0)}%`;
+            } else if (style === 'mars') {
+                data['Surface Temp'] = `${randomInRange(-80, -20)} °C`;
+                data['Atmosphere'] = 'Thin (CO2)';
+                data['Dust Storms'] = 'Frequent';
+            } else if (style === 'tatooine') {
+                data['Surface Temp'] = `${randomInRange(40, 70)} °C`;
+                data['Atmosphere'] = 'Arid';
+                data['Suns'] = '2';
+            } else if (style === 'death_star') {
+                data['Radius'] = '160 km';
+                data['Day Length'] = 'N/A';
+                data['Surface Temp'] = 'Controlled';
+                data['Superlaser'] = 'Operational';
+            }
+
+            let html = '';
+            for (const key in data) {
+                html += `<div class="data-point"><span>${key}</span><span class="data-value">${data[key]}</span></div>`;
+            }
+            dataContent.innerHTML = html;
+        }
+
         function summonAsteroid() {
             if (activeAsteroid) return;
             if (ring) scene.remove(ring);
             if (moon) scene.remove(moon);
+            ring = null;
+            moon = null;
 
             const asteroidGeom = new THREE.IcosahedronGeometry(0.1, 1);
             const asteroidMat = new THREE.MeshStandardMaterial({ color: 0x888888, flatShading: true });
@@ -611,9 +703,10 @@
 
         function createRing() {
             const ringGeom = new THREE.TorusGeometry(1.5, 0.1, 2, 100);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide });
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
             ring = new THREE.Mesh(ringGeom, ringMat);
-            ring.rotation.x = Math.PI / 2;
+            ring.rotation.x = Math.random() * Math.PI;
+            ring.rotation.y = Math.random() * Math.PI;
             scene.add(ring);
         }
 
@@ -631,9 +724,9 @@
             const time = clock.getElapsedTime();
 
             clouds.material.uniforms.time.value += delta;
-            planet.rotation.y += 0.01 * delta;
-            clouds.rotation.y += 0.015 * delta;
-            atmosphere.rotation.y += 0.015 * delta;
+            planet.rotation.y += 0.05 * delta;
+            clouds.rotation.y += 0.06 * delta;
+            atmosphere.rotation.y += 0.06 * delta;
 
             if (activeAsteroid) {
                 const direction = new THREE.Vector3().subVectors(planet.position, activeAsteroid.position).normalize();
@@ -650,7 +743,7 @@
             }
 
             if (ring) {
-                ring.rotation.z += 0.01 * delta;
+                ring.rotation.z += 0.02 * delta;
             }
             if (moon) {
                 moon.position.x = Math.cos(time * 0.5) * 1.5;
